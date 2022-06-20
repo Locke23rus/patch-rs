@@ -218,11 +218,13 @@ pub struct Hunk<'a> {
     pub new_range: Range,
     /// Each line of text in the hunk, prefixed with the type of change it represents
     pub lines: Vec<Line<'a>>,
+    pub context: &'a str,
+    pub header: &'a str,
 }
 
 impl<'a> fmt::Display for Hunk<'a> {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        write!(f, "@@ -{} +{} @@", self.old_range, self.new_range)?;
+        write!(f, "{}", self.header)?;
 
         for line in &self.lines {
             write!(f, "\n{}", line)?;

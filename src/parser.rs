@@ -156,26 +156,29 @@ fn chunk(input: Input<'_>) -> IResult<Input<'_>, Hunk> {
     let (input, ranges) = chunk_header(input)?;
     let (input, lines) = many1(chunk_line)(input)?;
 
-    let (old_range, new_range) = ranges;
+    let (old_range, new_range, context, header) = ranges;
     Ok((
         input,
         Hunk {
             old_range,
             new_range,
             lines,
+            context,
+            header,
         },
     ))
 }
 
-fn chunk_header(input: Input<'_>) -> IResult<Input<'_>, (Range, Range)> {
+fn chunk_header(input: Input<'_>) -> IResult<Input<'_>, (Range, Range, &str, &str)> {
+    let (_, header) = take_till(|c| c == '\n')(input)?;
     let (input, _) = tag("@@ -")(input)?;
     let (input, old_range) = range(input)?;
     let (input, _) = tag(" +")(input)?;
     let (input, new_range) = range(input)?;
     let (input, _) = tag(" @@")(input)?;
-    // Ignore any additional context provied after @@ (git sometimes adds this)
-    let (input, _) = many0(newline)(input)?;
-    Ok((input, (old_range, new_range)))
+    let (input, context) = take_till(|c| c == '\n')(input)?;
+    let (input, _) = newline(input)?;
+    Ok((input, (old_range, new_range, context.trim(), header.trim())))
 }
 
 fn range(input: Input<'_>) -> IResult<Input<'_>, Range> {
@@ -434,9 +437,11 @@ mod tests {
 
     #[test]
     fn test_chunk_header() -> ParseResult<'static, ()> {
-        test_parser!(chunk_header("@@ -1,7 +1,6 @@\n") -> (
+        test_parser!(chunk_header("@@ -1,7 +1,6 @@ foo bar\n") -> (
             Range { start: 1, count: 7 },
             Range { start: 1, count: 6 },
+            "foo bar",
+            "@@ -1,7 +1,6 @@ foo bar"
         ));
         Ok(())
     }
@@ -455,6 +460,8 @@ mod tests {
    so we may see their subtlety,
  And let there always be being,\n";
         let expected = Hunk {
+            header: "@@ -1,7 +1,6 @@",
+            context: "",
             old_range: Range { start: 1, count: 7 },
             new_range: Range { start: 1, count: 6 },
             lines: vec![
@@ -512,6 +519,8 @@ mod tests {
             },
             hunks: vec![
                 Hunk {
+                    header: "@@ -1,7 +1,6 @@",
+                    context: "",
                     old_range: Range { start: 1, count: 7 },
                     new_range: Range { start: 1, count: 6 },
                     lines: vec![
@@ -527,6 +536,8 @@ mod tests {
                     ],
                 },
                 Hunk {
+                    header: "@@ -9,3 +8,6 @@",
+                    context: "",
                     old_range: Range { start: 9, count: 3 },
                     new_range: Range { start: 8, count: 6 },
                     lines: vec![
